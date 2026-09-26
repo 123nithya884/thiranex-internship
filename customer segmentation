@@ -1,0 +1,419 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
+from sklearn.metrics import silhouette_score
+
+
+# ---------------------------------------------------
+# PAGE CONFIGURATION
+# ---------------------------------------------------
+
+st.set_page_config(
+    page_title="Customer Segmentation",
+    page_icon="👥",
+    layout="wide"
+)
+
+
+# ---------------------------------------------------
+# TITLE
+# ---------------------------------------------------
+
+st.title("👥 Customer Segmentation Dashboard")
+
+st.write(
+    "Analyze customer behavior and demographics using K-Means clustering."
+)
+
+
+# ---------------------------------------------------
+# LOAD DATA
+# ---------------------------------------------------
+
+file_path = "Customer_Segmentation/customer_segmentation.csv"
+
+try:
+    df = pd.read_csv(file_path)
+except Exception as e:
+    st.error("Could not load customer_segmentation.csv")
+    st.write(e)
+    st.stop()
+
+
+# ---------------------------------------------------
+# DATA PREVIEW
+# ---------------------------------------------------
+
+st.header("📊 Customer Dataset")
+
+st.dataframe(df.head(10), use_container_width=True)
+
+
+# ---------------------------------------------------
+# BASIC INFORMATION
+# ---------------------------------------------------
+
+col1, col2, col3, col4 = st.columns(4)
+
+with col1:
+    st.metric(
+        "Total Customers",
+        len(df)
+    )
+
+with col2:
+    st.metric(
+        "Total Features",
+        len(df.columns)
+    )
+
+with col3:
+    st.metric(
+        "Missing Values",
+        int(df.isnull().sum().sum())
+    )
+
+with col4:
+    st.metric(
+        "Duplicate Rows",
+        int(df.duplicated().sum())
+    )
+
+
+# ---------------------------------------------------
+# DATA CLEANING
+# ---------------------------------------------------
+
+df = df.drop_duplicates()
+
+numeric_columns = df.select_dtypes(
+    include=np.number
+).columns.tolist()
+
+for column in numeric_columns:
+    df[column] = df[column].fillna(
+        df[column].median()
+    )
+
+
+# ---------------------------------------------------
+# FEATURE SELECTION
+# ---------------------------------------------------
+
+st.header("🎯 Select Features for Clustering")
+
+# Remove columns that are probably IDs
+id_words = [
+    "id",
+    "customer_id",
+    "customerid",
+    "clientnum",
+    "number"
+]
+
+features = []
+
+for column in numeric_columns:
+
+    column_lower = column.lower()
+
+    if not any(word in column_lower for word in id_words):
+        features.append(column)
+
+
+if len(features) < 2:
+
+    st.error(
+        "The dataset needs at least two numerical features."
+    )
+
+    st.stop()
+
+
+selected_features = st.multiselect(
+    "Choose customer features:",
+    features,
+    default=features
+)
+
+
+if len(selected_features) < 2:
+
+    st.warning(
+        "Please select at least 2 features."
+    )
+
+    st.stop()
+
+
+X = df[selected_features].copy()
+
+
+# ---------------------------------------------------
+# STANDARDIZATION
+# ---------------------------------------------------
+
+scaler = StandardScaler()
+
+X_scaled = scaler.fit_transform(X)
+
+
+# ---------------------------------------------------
+# ELBOW METHOD
+# ---------------------------------------------------
+
+st.header("📈 Elbow Method")
+
+inertia = []
+
+for k in range(2, 11):
+
+    model = KMeans(
+        n_clusters=k,
+        random_state=42,
+        n_init=10
+    )
+
+    model.fit(X_scaled)
+
+    inertia.append(model.inertia_)
+
+
+fig, ax = plt.subplots(figsize=(8, 5))
+
+ax.plot(
+    range(2, 11),
+    inertia,
+    marker="o"
+)
+
+ax.set_xlabel("Number of Clusters")
+ax.set_ylabel("Inertia")
+ax.set_title("Elbow Method for Optimal K")
+
+st.pyplot(fig)
+
+
+# ---------------------------------------------------
+# SELECT NUMBER OF CLUSTERS
+# ---------------------------------------------------
+
+st.header("🤖 K-Means Customer Segmentation")
+
+num_clusters = st.slider(
+    "Select number of customer segments:",
+    min_value=2,
+    max_value=10,
+    value=4
+)
+
+
+# ---------------------------------------------------
+# K-MEANS
+# ---------------------------------------------------
+
+kmeans = KMeans(
+    n_clusters=num_clusters,
+    random_state=42,
+    n_init=10
+)
+
+clusters = kmeans.fit_predict(X_scaled)
+
+df["Customer_Segment"] = clusters + 1
+
+
+# ---------------------------------------------------
+# SILHOUETTE SCORE
+# ---------------------------------------------------
+
+score = silhouette_score(
+    X_scaled,
+    clusters
+)
+
+
+col1, col2 = st.columns(2)
+
+with col1:
+    st.metric(
+        "Number of Segments",
+        num_clusters
+    )
+
+with col2:
+    st.metric(
+        "Silhouette Score",
+        round(score, 3)
+    )
+
+
+# ---------------------------------------------------
+# CUSTOMER COUNT BY SEGMENT
+# ---------------------------------------------------
+
+st.header("👥 Customers in Each Segment")
+
+segment_counts = (
+    df["Customer_Segment"]
+    .value_counts()
+    .sort_index()
+)
+
+
+fig, ax = plt.subplots(figsize=(8, 5))
+
+ax.bar(
+    segment_counts.index.astype(str),
+    segment_counts.values
+)
+
+ax.set_xlabel("Customer Segment")
+ax.set_ylabel("Number of Customers")
+ax.set_title("Customer Distribution by Segment")
+
+st.pyplot(fig)
+
+
+# ---------------------------------------------------
+# PCA VISUALIZATION
+# ---------------------------------------------------
+
+st.header("🎯 Customer Segment Visualization")
+
+pca = PCA(n_components=2)
+
+X_pca = pca.fit_transform(X_scaled)
+
+
+pca_df = pd.DataFrame(
+    X_pca,
+    columns=["PC1", "PC2"]
+)
+
+pca_df["Segment"] = clusters + 1
+
+
+fig, ax = plt.subplots(figsize=(9, 6))
+
+for segment in sorted(
+    pca_df["Segment"].unique()
+):
+
+    data = pca_df[
+        pca_df["Segment"] == segment
+    ]
+
+    ax.scatter(
+        data["PC1"],
+        data["PC2"],
+        label=f"Segment {segment}",
+        s=60
+    )
+
+
+ax.set_xlabel("Principal Component 1")
+ax.set_ylabel("Principal Component 2")
+ax.set_title("Customer Segments using PCA")
+ax.legend()
+
+st.pyplot(fig)
+
+
+# ---------------------------------------------------
+# SEGMENT PROFILE
+# ---------------------------------------------------
+
+st.header("📋 Customer Segment Profile")
+
+profile = (
+    df.groupby("Customer_Segment")
+    [selected_features]
+    .mean()
+    .round(2)
+)
+
+st.dataframe(
+    profile,
+    use_container_width=True
+)
+
+
+# ---------------------------------------------------
+# SEGMENT SIZE
+# ---------------------------------------------------
+
+st.header("📊 Segment Size")
+
+percentage = (
+    df["Customer_Segment"]
+    .value_counts(normalize=True)
+    .sort_index()
+    * 100
+)
+
+segment_summary = pd.DataFrame({
+    "Customers": segment_counts,
+    "Percentage": percentage.round(2)
+})
+
+st.dataframe(
+    segment_summary,
+    use_container_width=True
+)
+
+
+# ---------------------------------------------------
+# FINAL DATA
+# ---------------------------------------------------
+
+st.header("📄 Final Segmented Customer Data")
+
+st.dataframe(
+    df,
+    use_container_width=True
+)
+
+
+# ---------------------------------------------------
+# DOWNLOAD
+# ---------------------------------------------------
+
+csv = df.to_csv(index=False)
+
+st.download_button(
+    label="⬇️ Download Segmented Customer Data",
+    data=csv,
+    file_name="customer_segmented.csv",
+    mime="text/csv"
+)
+
+
+# ---------------------------------------------------
+# INSIGHTS
+# ---------------------------------------------------
+
+st.header("💡 Customer Segmentation Insights")
+
+st.write(
+    """
+    K-Means clustering groups customers with similar
+    characteristics into different segments.
+
+    The segments can help businesses understand:
+
+    • Customer purchasing behavior
+    • Customer demographics
+    • Spending patterns
+    • Customer preferences
+    • High-value customers
+    • Low-value customers
+    • Customer retention opportunities
+    • Targeted marketing opportunities
+    """
+)
