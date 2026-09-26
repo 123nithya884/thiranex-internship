@@ -1,0 +1,192 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+
+st.set_page_config(
+    page_title="Predictive Analytics",
+    page_icon="📈",
+    layout="wide"
+)
+
+st.title("📈 Predictive Analytics Using Historical Data")
+st.write("Forecast future sales trends using Machine Learning.")
+
+# Load dataset
+df = pd.read_csv("historical.csv")
+
+# Convert Date column
+df["Date"] = pd.to_datetime(df["Date"])
+
+# Sort data
+df = df.sort_values("Date")
+
+# Display dataset
+st.subheader("📊 Historical Data")
+st.dataframe(df)
+
+# Data information
+st.subheader("🔍 Data Information")
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.metric("Total Records", len(df))
+
+with col2:
+    st.metric("Total Sales", int(df["Sales"].sum()))
+
+with col3:
+    st.metric("Average Sales", round(df["Sales"].mean(), 2))
+
+# Visualization
+st.subheader("📈 Historical Sales Trend")
+
+fig, ax = plt.subplots()
+
+ax.plot(
+    df["Date"],
+    df["Sales"],
+    marker="o"
+)
+
+ax.set_xlabel("Date")
+ax.set_ylabel("Sales")
+ax.set_title("Historical Sales Trend")
+
+plt.xticks(rotation=45)
+plt.tight_layout()
+
+st.pyplot(fig)
+
+# Create time feature
+df["Time"] = np.arange(len(df))
+
+# Features and target
+X = df[["Time"]]
+y = df["Sales"]
+
+# Train model
+model = LinearRegression()
+model.fit(X, y)
+
+# Predictions on historical data
+df["Predicted_Sales"] = model.predict(X)
+
+# Model evaluation
+mae = mean_absolute_error(y, df["Predicted_Sales"])
+mse = mean_squared_error(y, df["Predicted_Sales"])
+rmse = np.sqrt(mse)
+r2 = r2_score(y, df["Predicted_Sales"])
+
+st.subheader("🤖 Model Evaluation")
+
+col1, col2, col3, col4 = st.columns(4)
+
+with col1:
+    st.metric("MAE", round(mae, 2))
+
+with col2:
+    st.metric("MSE", round(mse, 2))
+
+with col3:
+    st.metric("RMSE", round(rmse, 2))
+
+with col4:
+    st.metric("R² Score", round(r2, 2))
+
+# Actual vs predicted
+st.subheader("📊 Actual vs Predicted Sales")
+
+fig2, ax2 = plt.subplots()
+
+ax2.plot(
+    df["Date"],
+    df["Sales"],
+    marker="o",
+    label="Actual Sales"
+)
+
+ax2.plot(
+    df["Date"],
+    df["Predicted_Sales"],
+    linestyle="--",
+    label="Predicted Sales"
+)
+
+ax2.set_xlabel("Date")
+ax2.set_ylabel("Sales")
+ax2.set_title("Actual vs Predicted Sales")
+ax2.legend()
+
+plt.xticks(rotation=45)
+plt.tight_layout()
+
+st.pyplot(fig2)
+
+# Future prediction
+st.subheader("🔮 Future Sales Forecast")
+
+months = st.slider(
+    "Select number of future months",
+    min_value=1,
+    max_value=12,
+    value=6
+)
+
+last_time = len(df) - 1
+
+future_time = np.arange(
+    last_time + 1,
+    last_time + 1 + months
+).reshape(-1, 1)
+
+future_predictions = model.predict(future_time)
+
+last_date = df["Date"].max()
+
+future_dates = pd.date_range(
+    start=last_date + pd.DateOffset(months=1),
+    periods=months,
+    freq="MS"
+)
+
+future_df = pd.DataFrame({
+    "Date": future_dates,
+    "Predicted Sales": future_predictions.round(2)
+})
+
+st.dataframe(future_df)
+
+# Future graph
+fig3, ax3 = plt.subplots()
+
+ax3.plot(
+    df["Date"],
+    df["Sales"],
+    marker="o",
+    label="Historical Sales"
+)
+
+ax3.plot(
+    future_df["Date"],
+    future_df["Predicted Sales"],
+    marker="o",
+    linestyle="--",
+    label="Future Forecast"
+)
+
+ax3.set_xlabel("Date")
+ax3.set_ylabel("Sales")
+ax3.set_title("Future Sales Forecast")
+ax3.legend()
+
+plt.xticks(rotation=45)
+plt.tight_layout()
+
+st.pyplot(fig3)
+
+st.success("✅ Predictive analytics completed successfully!")
