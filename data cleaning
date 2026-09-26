@@ -1,0 +1,137 @@
+import pandas as pd
+import os
+import matplotlib.pyplot as plt
+
+# -----------------------------
+# 1. Create output folder
+# -----------------------------
+os.makedirs("output", exist_ok=True)
+
+# -----------------------------
+# 2. Read input data
+# -----------------------------
+input_file = "data.csv"
+
+df = pd.read_csv(input_file)
+
+print("Original Data:")
+print(df)
+
+print("\nOriginal Shape:", df.shape)
+
+# -----------------------------
+# 3. Remove duplicate rows
+# -----------------------------
+duplicate_count = df.duplicated().sum()
+
+df = df.drop_duplicates()
+
+print("\nDuplicates Removed:", duplicate_count)
+
+# -----------------------------
+# 4. Handle missing values
+# -----------------------------
+
+# Fill missing numeric values with median
+numeric_columns = df.select_dtypes(include=["number"]).columns
+
+for column in numeric_columns:
+    df[column] = df[column].fillna(df[column].median())
+
+# Fill missing text values with "Unknown"
+text_columns = df.select_dtypes(include=["object"]).columns
+
+for column in text_columns:
+    df[column] = df[column].fillna("Unknown")
+
+# -----------------------------
+# 5. Fix inconsistent text
+# -----------------------------
+
+for column in text_columns:
+    df[column] = df[column].astype(str).str.strip().str.title()
+
+# -----------------------------
+# 6. Generate data summary
+# -----------------------------
+
+total_rows = len(df)
+total_columns = len(df.columns)
+
+missing_values = df.isnull().sum().sum()
+
+print("\nCleaned Data:")
+print(df)
+
+print("\nCleaned Shape:", df.shape)
+
+print("\nRemaining Missing Values:", missing_values)
+
+# -----------------------------
+# 7. Save cleaned data
+# -----------------------------
+
+cleaned_file = "output/cleaned_data.csv"
+
+df.to_csv(cleaned_file, index=False)
+
+# -----------------------------
+# 8. Generate summary report
+# -----------------------------
+
+report = pd.DataFrame({
+    "Metric": [
+        "Original Rows",
+        "Original Columns",
+        "Duplicates Removed",
+        "Final Rows",
+        "Final Columns",
+        "Remaining Missing Values"
+    ],
+    "Value": [
+        total_rows + duplicate_count,
+        total_columns,
+        duplicate_count,
+        total_rows,
+        total_columns,
+        missing_values
+    ]
+})
+
+report_file = "output/data_cleaning_report.xlsx"
+
+with pd.ExcelWriter(report_file, engine="openpyxl") as writer:
+    df.to_excel(writer, sheet_name="Cleaned Data", index=False)
+    report.to_excel(writer, sheet_name="Summary Report", index=False)
+
+# -----------------------------
+# 9. Create visual summary
+# -----------------------------
+
+plt.figure(figsize=(8, 5))
+
+df.select_dtypes(include=["number"]).mean().plot(
+    kind="bar"
+)
+
+plt.title("Average Numeric Values")
+plt.xlabel("Columns")
+plt.ylabel("Average Value")
+plt.tight_layout()
+
+chart_file = "output/data_summary_chart.png"
+
+plt.savefig(chart_file)
+plt.close()
+
+# -----------------------------
+# 10. Final message
+# -----------------------------
+
+print("\n--------------------------------")
+print("DATA CLEANING COMPLETED")
+print("--------------------------------")
+
+print("Cleaned Data:", cleaned_file)
+print("Excel Report:", report_file)
+print("Chart:", chart_file)
